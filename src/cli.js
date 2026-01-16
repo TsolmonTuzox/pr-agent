@@ -56,10 +56,16 @@ function main() {
     
     if (result.status === 'success') {
       console.log('✅ Agent execution complete!');
-      console.log('\nPR Data for creation:');
+      console.log('\nPR Data:');
       console.log(JSON.stringify(result.prData, null, 2));
-      console.log('\nNow creating PR via GitHub API...\n');
+      console.log('\nReady for PR creation via GitHub API');
       process.exit(0);
+    }
+    
+    if (result.status === 'verify_failed') {
+      console.log('\n❌ Verification failed. Tests did not pass after applying fix.');
+      console.log('No PR will be created.');
+      process.exit(1);
     }
     
     if (result.status === 'needs_llm') {

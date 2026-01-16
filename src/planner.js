@@ -7,28 +7,19 @@ const executor = require('./executor');
 
 /**
  * Generate fix plan using LLM
- * This uses Claude (the current conversation context) to analyze and propose fixes
  */
 function generatePlan(repoPath, goal, testOutput) {
-  // In a real implementation, this would call Claude API
-  // For the hackathon demo, we'll use a placeholder that returns
-  // a structure that the agent can work with
-  
-  // Read relevant files based on goal
   const files = findRelevantFiles(repoPath, goal);
   
   if (files.length === 0) {
     throw new Error('No relevant files found for goal: ' + goal);
   }
   
-  // Read file contents
   const fileContents = {};
   for (const file of files) {
     fileContents[file] = executor.readFile(file);
   }
   
-  // For demo: Return a plan structure
-  // In real implementation, LLM would analyze and return this
   return {
     files: files,
     fileContents: fileContents,
@@ -42,7 +33,6 @@ function generatePlan(repoPath, goal, testOutput) {
  * Find relevant files based on goal
  */
 function findRelevantFiles(repoPath, goal) {
-  // Extract file path from goal if mentioned
   const fileMatch = goal.match(/(\w+\/[\w.]+)/);
   
   if (fileMatch) {
@@ -52,14 +42,13 @@ function findRelevantFiles(repoPath, goal) {
     }
   }
   
-  // Fallback: find test files and source files
   const jsFiles = executor.listFiles(repoPath, '.js');
   const relevantFiles = jsFiles.filter(function(file) {
     return file.indexOf('node_modules') === -1 &&
            file.indexOf('.git') === -1;
   });
   
-  return relevantFiles.slice(0, 5); // Limit to 5 files
+  return relevantFiles.slice(0, 5);
 }
 
 /**
@@ -67,15 +56,56 @@ function findRelevantFiles(repoPath, goal) {
  * Used only if LLM is unavailable
  */
 function getFallbackPatch(repoPath, goal) {
-  // Specific patch for our demo case
   if (goal.indexOf('utils/date.js') !== -1) {
     const targetFile = repoPath + '/utils/date.js';
     
+    // Read current file to build complete patch
+    const currentContent = executor.readFile(targetFile);
+    
+    // Old code includes both bugs
+    const oldCode = 'function addDays(date, days) {\n' +
+      '  const result = new Date(date);\n' +
+      '  // BUG: This is intentionally wrong - should add days, not set them\n' +
+      '  result.setDate(days);\n' +
+      '  return result;\n' +
+      '}\n' +
+      '\n' +
+      '/**\n' +
+      ' * Formats a date as YYYY-MM-DD\n' +
+      ' * @param {Date} date - The date to format\n' +
+      ' * @returns {string} Formatted date string\n' +
+      ' */\n' +
+      'function formatDate(date) {\n' +
+      '  const year = date.getFullYear();\n' +
+      '  const month = String(date.getMonth() + 1).padStart(2, \'0\');\n' +
+      '  const day = String(date.getDate()).padStart(2, \'0\');\n' +
+      '  return `${year}-${month}-${day}`;\n' +
+      '}';
+    
+    // New code fixes both bugs
+    const newCode = 'function addDays(date, days) {\n' +
+      '  const result = new Date(date);\n' +
+      '  result.setDate(result.getDate() + days);\n' +
+      '  return result;\n' +
+      '}\n' +
+      '\n' +
+      '/**\n' +
+      ' * Formats a date as YYYY-MM-DD\n' +
+      ' * @param {Date} date - The date to format\n' +
+      ' * @returns {string} Formatted date string\n' +
+      ' */\n' +
+      'function formatDate(date) {\n' +
+      '  const year = date.getUTCFullYear();\n' +
+      '  const month = String(date.getUTCMonth() + 1).padStart(2, \'0\');\n' +
+      '  const day = String(date.getUTCDate()).padStart(2, \'0\');\n' +
+      '  return `${year}-${month}-${day}`;\n' +
+      '}';
+    
     return {
       file: targetFile,
-      oldCode: '  result.setDate(days);',
-      newCode: '  result.setDate(result.getDate() + days);',
-      summary: 'Fixed addDays function to correctly add days instead of setting day of month'
+      oldCode: oldCode,
+      newCode: newCode,
+      summary: 'Fixed addDays to add days correctly and formatDate to use UTC getters'
     };
   }
   

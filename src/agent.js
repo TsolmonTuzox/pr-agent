@@ -65,7 +65,27 @@ function run(repoUrl, goal) {
     // Step 5: Verify fix
     console.log('[5/7] 🧪 Verifying fix...');
     const verifyResult = verifier.runTests(repoPath);
-    console.log('✓ Tests ' + (verifyResult.success ? 'now passing' : 'still failing') + '\n');
+    
+    if (!verifyResult.success) {
+      console.log('✗ Tests still failing\n');
+      console.log('Verification output:\n' + verifyResult.output);
+      
+      // Clean up on verification failure
+      if (workDir && fs.existsSync(workDir)) {
+        try {
+          execSync('rm -rf ' + workDir, { stdio: 'pipe' });
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+      }
+      
+      return {
+        status: 'verify_failed',
+        output: verifyResult.output
+      };
+    }
+    
+    console.log('✓ Tests now passing (' + (baselineResult.success ? 'still passing' : 'fixed') + ')\n');
     
     // Step 6: Commit and push
     console.log('[6/7] 📤 Committing and pushing...');
