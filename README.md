@@ -1,5 +1,7 @@
 # PR Agent – Verified Autonomous Pull Request Generator
 
+> **Hackathon Judges**: See [SUBMISSION.md](SUBMISSION.md) for complete project overview and evaluation instructions.
+
 PR Agent is an autonomous, safety-aware coding agent that:
 - Inspects a repository
 - Applies a targeted code fix based on a user goal
