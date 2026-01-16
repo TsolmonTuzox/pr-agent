@@ -3,6 +3,7 @@
  */
 
 const { execSync } = require('child_process');
+const fs = require('fs');
 
 /**
  * Create a new branch with timestamp
@@ -70,7 +71,7 @@ function getRepoInfo(repoPath) {
       encoding: 'utf8'
     }).trim();
     
-    // Parse GitHub URL: https://github.com/owner/repo.git or git@github.com:owner/repo.git
+    // Parse GitHub URL
     let match = remoteUrl.match(/github\.com[:/]([^/]+)\/(.+?)(\.git)?$/);
     
     if (match) {
@@ -102,19 +103,73 @@ function getTimestamp() {
 }
 
 /**
- * Create GitHub PR
- * Note: This is a placeholder that returns the structure needed
- * The actual PR creation will be done via Claude's tools
+ * Create GitHub PR using curl and GitHub API
  */
-function createPullRequest(repoInfo, branchName, title, body) {
-  return {
-    owner: repoInfo.owner,
-    repo: repoInfo.repo,
+function createPullRequestActual(repoInfo, branchName, title, body) {
+  const token = process.env.GITHUB_TOKEN;
+  
+  if (!token) {
+    throw new Error('GITHUB_TOKEN environment variable not set');
+  }
+  
+  // Escape body for JSON
+  const escapedBody = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+  const escapedTitle = title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  
+  // Create JSON payload file
+  const payloadPath = '/tmp/pr-payload-' + Date.now() + '.json';
+  const payload = {
+    title: escapedTitle,
+    body: escapedBody,
     head: branchName,
-    base: 'main',
-    title: title,
-    body: body
+    base: 'main'
   };
+  
+  fs.writeFileSync(payloadPath, JSON.stringify(payload));
+  
+  try {
+    const apiUrl = 'https://api.github.com/repos/' + repoInfo.owner + '/' + repoInfo.repo + '/pulls';
+    
+    const curlCommand = 'curl -s -X POST ' +
+      '-H "Authorization: token ' + token + '" ' +
+      '-H "Accept: application/vnd.github.v3+json" ' +
+      '-d @' + payloadPath + ' ' +
+      apiUrl;
+    
+    const response = execSync(curlCommand, {
+      encoding: 'utf8',
+      stdio: 'pipe'
+    });
+    
+    // Clean up payload file
+    try {
+      fs.unlinkSync(payloadPath);
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+    
+    const prData = JSON.parse(response);
+    
+    if (prData.html_url) {
+      return prData.html_url;
+    }
+    
+    if (prData.message) {
+      throw new Error('GitHub API error: ' + prData.message);
+    }
+    
+    throw new Error('Failed to create PR: ' + response);
+    
+  } catch (error) {
+    // Clean up payload file
+    try {
+      fs.unlinkSync(payloadPath);
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+    
+    throw new Error('Failed to create PR: ' + error.message);
+  }
 }
 
 module.exports = {
@@ -122,5 +177,5 @@ module.exports = {
   commitChanges: commitChanges,
   pushBranch: pushBranch,
   getRepoInfo: getRepoInfo,
-  createPullRequest: createPullRequest
+  createPullRequestActual: createPullRequestActual
 };

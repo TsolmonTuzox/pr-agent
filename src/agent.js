@@ -25,8 +25,9 @@ function run(repoUrl, goal) {
   try {
     // Step 1: Clone or open repository
     console.log('[1/7] 🔍 Cloning repository...');
-    repoPath = cloneRepository(repoUrl);
-    workDir = path.dirname(repoPath);
+    const cloneResult = cloneRepository(repoUrl);
+    repoPath = cloneResult.repoPath;
+    workDir = cloneResult.workDir;
     console.log('✓ Repository cloned to ' + repoPath + '\n');
     
     // Step 2: Run baseline tests
@@ -34,50 +35,32 @@ function run(repoUrl, goal) {
     const baselineResult = verifier.runTests(repoPath);
     console.log('✓ Tests captured (' + (baselineResult.success ? 'passing' : 'failing') + ')\n');
     
-    // Step 3: Generate plan (needs LLM intervention here)
+    // Step 3: Generate plan and try fallback patch
     console.log('[3/7] 🧠 Analyzing and planning fix...');
-    const plan = planner.generatePlan(repoPath, goal, baselineResult.output);
+    const fallbackPatch = planner.getFallbackPatch(repoPath, goal);
     
-    // For hackathon demo: Stop here and ask for LLM patch
-    // In production: LLM would be called automatically
-    console.log('⚠️  LLM intervention required');
-    console.log('\nPlease provide the fix patch:');
-    console.log('- Target file: ' + (plan.files[0] || 'unknown'));
-    console.log('- Test output:\n' + baselineResult.output + '\n');
-    
-    return {
-      status: 'needs_llm',
-      plan: plan,
-      repoPath: repoPath,
-      workDir: workDir,
-      baselineResult: baselineResult
-    };
-    
-  } catch (error) {
-    // Clean up on error
-    if (workDir && fs.existsSync(workDir)) {
-      try {
-        execSync('rm -rf ' + workDir, { stdio: 'pipe' });
-      } catch (e) {
-        // Ignore cleanup errors
-      }
+    if (!fallbackPatch) {
+      console.log('⚠️  LLM intervention required');
+      const plan = planner.generatePlan(repoPath, goal, baselineResult.output);
+      console.log('\nPlease provide the fix patch:');
+      console.log('- Target file: ' + (plan.files[0] || 'unknown'));
+      console.log('- Test output:\n' + baselineResult.output + '\n');
+      
+      return {
+        status: 'needs_llm',
+        plan: plan,
+        repoPath: repoPath,
+        workDir: workDir,
+        baselineResult: baselineResult
+      };
     }
     
-    throw error;
-  }
-}
-
-/**
- * Continue execution with LLM-provided patch
- */
-function continueWithPatch(state, patch) {
-  const { repoPath, workDir, baselineResult } = state;
-  
-  try {
+    console.log('✓ Plan generated: ' + fallbackPatch.summary + '\n');
+    
     // Step 4: Apply fix
     console.log('[4/7] ⚙️  Applying fix...');
-    executor.applyChanges(patch.file, patch.oldCode, patch.newCode);
-    console.log('✓ File modified: ' + patch.file + '\n');
+    executor.applyChanges(fallbackPatch.file, fallbackPatch.oldCode, fallbackPatch.newCode);
+    console.log('✓ File modified: ' + path.basename(fallbackPatch.file) + '\n');
     
     // Step 5: Verify fix
     console.log('[5/7] 🧪 Verifying fix...');
@@ -89,7 +72,7 @@ function continueWithPatch(state, patch) {
     const branchName = publisher.createBranch(repoPath);
     console.log('✓ Branch created: ' + branchName);
     
-    publisher.commitChanges(repoPath, patch.summary || 'Fix: Apply automated patch');
+    publisher.commitChanges(repoPath, fallbackPatch.summary);
     console.log('✓ Changes committed');
     
     publisher.pushBranch(repoPath, branchName);
@@ -98,12 +81,14 @@ function continueWithPatch(state, patch) {
     // Step 7: Create PR
     console.log('[7/7] 🎉 Creating pull request...');
     const repoInfo = publisher.getRepoInfo(repoPath);
-    const prInfo = publisher.createPullRequest(
+    const prBody = createPRBody(fallbackPatch, baselineResult, verifyResult);
+    const prUrl = publisher.createPullRequestActual(
       repoInfo,
       branchName,
-      'Fix: ' + patch.summary,
-      createPRBody(patch, baselineResult, verifyResult)
+      'Fix: ' + fallbackPatch.summary,
+      prBody
     );
+    console.log('✓ PR created: ' + prUrl + '\n');
     
     // Clean up on success
     if (workDir && fs.existsSync(workDir)) {
@@ -116,10 +101,13 @@ function continueWithPatch(state, patch) {
     
     return {
       status: 'success',
-      prInfo: prInfo
+      prUrl: prUrl,
+      branchName: branchName
     };
     
   } catch (error) {
+    // Keep workDir on error for debugging
+    console.error('\n❌ Error occurred. Workspace preserved at: ' + workDir);
     throw error;
   }
 }
@@ -145,7 +133,10 @@ function cloneRepository(repoUrl) {
     execSync('cp -r ' + repoUrl + ' ' + repoPath, { stdio: 'pipe' });
   }
   
-  return repoPath;
+  return {
+    repoPath: repoPath,
+    workDir: workDir
+  };
 }
 
 /**
@@ -163,6 +154,5 @@ function createPRBody(patch, baselineResult, verifyResult) {
 }
 
 module.exports = {
-  run: run,
-  continueWithPatch: continueWithPatch
+  run: run
 };

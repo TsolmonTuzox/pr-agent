@@ -54,25 +54,16 @@ function main() {
   try {
     const result = agent.run(args.repo, args.goal);
     
-    if (result.status === 'needs_llm') {
-      console.log('⏸️  Agent paused for LLM intervention');
-      console.log('\nTo continue, call agent.continueWithPatch() with:');
-      console.log(JSON.stringify({
-        file: result.plan.files[0] || 'unknown',
-        oldCode: '<code to replace>',
-        newCode: '<new code>',
-        summary: '<description>'
-      }, null, 2));
+    if (result.status === 'success') {
+      console.log('✅ Done! PR is ready for review.');
+      console.log('\nPR URL: ' + result.prUrl);
+      console.log('Branch: ' + result.branchName);
       process.exit(0);
     }
     
-    if (result.status === 'success') {
-      console.log('✅ Done! PR is ready for review.');
-      console.log('\nPR Info:');
-      console.log('- Owner: ' + result.prInfo.owner);
-      console.log('- Repo: ' + result.prInfo.repo);
-      console.log('- Branch: ' + result.prInfo.head);
-      process.exit(0);
+    if (result.status === 'needs_llm') {
+      console.log('⚠️  No fallback patch available. LLM intervention required.');
+      process.exit(1);
     }
     
   } catch (error) {
