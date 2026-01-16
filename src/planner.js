@@ -206,6 +206,15 @@ function getLLMPatch(repoPath, goal, testOutput) {
       res.on('end', function() {
         if (res.statusCode !== 200) {
           console.log('⚠️  Anthropic API error: ' + res.statusCode);
+          // Log error details without exposing API key
+          try {
+            var errBody = JSON.parse(data);
+            if (errBody.error && errBody.error.message) {
+              console.log('⚠️  Error details: ' + errBody.error.message);
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
           resolve(null);
           return;
         }
