@@ -7,7 +7,7 @@ PR Agent is an autonomous, safety-aware coding agent that:
 - **Stops if tests fail**
 - Creates a Pull Request **only when verification passes**
 
-This is not a script.  
+This is not a script.
 This is a controlled agent loop with explicit safety gates.
 
 ---
@@ -19,7 +19,7 @@ The agent performs the following steps **every run**:
 1. Clone or open a repository
 2. Run baseline tests and capture failures
 3. Analyze the user goal
-4. Apply a deterministic or planned code change
+4. Apply a deterministic or LLM-generated code change
 5. Re-run tests
 6. **Stop immediately if tests fail**
 7. Create a Git branch, commit the fix, and open a Pull Request
@@ -42,7 +42,7 @@ node src/cli.js \
 - Tests pass (2/2)
 - Opens Pull Request with before/after test output
 
-**Actual PR created:**  
+**Actual PR created:**
 https://github.com/TsolmonTuzox/pr-agent-demo/pull/2
 
 ---
@@ -53,8 +53,44 @@ https://github.com/TsolmonTuzox/pr-agent-demo/pull/2
 - Git configured
 - GitHub authentication via MCP tools
 
-**Zero npm dependencies.**  
+**Zero npm dependencies.**
 Uses Node.js built-ins only.
+
+---
+
+## LLM Mode (Anthropic)
+
+PR Agent supports optional LLM-powered code analysis using the Anthropic API.
+
+### Setup
+
+Set the environment variable:
+```bash
+export ANTHROPIC_API_KEY=your-api-key-here
+```
+
+Optional: specify a model (defaults to `claude-sonnet-4-20250514`):
+```bash
+export ANTHROPIC_MODEL=claude-sonnet-4-20250514
+```
+
+### Behavior
+
+1. **Demo repository**: The fallback patch is always used for the demo repo (`pr-agent-demo`). This ensures deterministic demo behavior regardless of LLM availability.
+
+2. **Other repositories**: If no fallback patch is available:
+   - With `ANTHROPIC_API_KEY` set: The agent calls the Anthropic API to generate a fix
+   - Without `ANTHROPIC_API_KEY`: Returns `needs_llm` status, indicating manual intervention required
+
+3. **Safety preserved**: LLM-generated patches go through the same verification gate. If tests fail after applying an LLM patch, **no commit and no PR are created**.
+
+### LLM Patch Validation
+
+LLM responses are strictly validated:
+- Must return valid JSON with `summary`, `file`, `oldCode`, `newCode`
+- `file` must be a relative path to an existing file
+- `oldCode` must match exactly in the target file
+- Any validation failure falls back to `needs_llm` status
 
 ---
 
@@ -64,7 +100,7 @@ Uses Node.js built-ins only.
 src/
 ├── cli.js          # Entry point - argument parsing
 ├── agent.js        # Main orchestrator (observe → plan → act → verify → submit)
-├── planner.js      # Fallback patch logic (demo-specific)
+├── planner.js      # Fallback patch + LLM patch logic
 ├── executor.js     # File read/write operations
 ├── verifier.js     # Test execution and output capture
 └── publisher.js    # Git operations + GitHub PR creation
@@ -74,25 +110,26 @@ src/
 
 ## Agent Loop (Implemented)
 
-1. **Observe**  
+1. **Observe**
    - Clone repository to `/tmp/pr-agent-work/<repo>-<timestamp>`
    - Run baseline tests via `npm test`
    - Capture failing test output
 
-2. **Plan**  
-   - Apply fallback patch (deterministic for demo)
-   - Future: LLM-based analysis
+2. **Plan**
+   - Try fallback patch first (deterministic, for demo reliability)
+   - If no fallback: Try LLM patch (if ANTHROPIC_API_KEY set)
+   - If no LLM: Return needs_llm status
 
-3. **Act**  
+3. **Act**
    - Apply code changes to target file
    - Use string replacement
 
-4. **Verify**  
+4. **Verify**
    - Re-run tests via `npm test`
    - **If tests fail: STOP. No commit, no PR.**
    - Capture passing test output
 
-5. **Submit**  
+5. **Submit**
    - Create branch: `fix/YYYYMMDD-HHMMSS`
    - Commit changes
    - Push to GitHub
@@ -122,7 +159,7 @@ src/
 ✓ Tests captured (failing) - 0/2 passing
 
 [3/7] 🧠 Analyzing and planning fix...
-✓ Plan generated: Fixed addDays to add days correctly and formatDate to use UTC getters
+✓ Plan generated (fallback): Fixed addDays to add days correctly and formatDate to use UTC getters
 
 [4/7] ⚙️  Applying fix...
 ✓ File modified: date.js
@@ -156,12 +193,13 @@ src/
 
 ## Verified Capabilities
 
-✅ **Autonomous execution** – No human intervention required  
-✅ **Test-driven safety** – Stops if tests fail  
-✅ **GitHub integration** – Creates real Pull Requests  
-✅ **Before/after evidence** – Test output included in PR body  
-✅ **Clean workspace** – Isolated temporary directories  
+✅ **Autonomous execution** – No human intervention required
+✅ **Test-driven safety** – Stops if tests fail
+✅ **GitHub integration** – Creates real Pull Requests
+✅ **Before/after evidence** – Test output included in PR body
+✅ **Clean workspace** – Isolated temporary directories
 ✅ **Zero dependencies** – Pure Node.js (v12 compatible)
+✅ **Optional LLM** – Anthropic integration for non-demo repos
 
 ---
 
