@@ -259,13 +259,30 @@ curl -X POST http://localhost:8787/run \
 ### Retool Setup
 
 1. Create a new **REST API** resource in Retool
-2. Set Base URL: `http://localhost:8787` (or your server's public URL)
+2. Set Base URL: `http://localhost:8787`
 3. Create a query with:
    - Method: POST
    - Path: `/run`
    - Body: `{ "repo": "{{repoInput.value}}", "goal": "{{goalInput.value}}" }`
 4. Display `{{ query.data.logs }}` in a text area
 5. Display `{{ query.data.prData }}` as JSON or link to PR
+
+**Note**: If using Retool Cloud, expose the local server via a tunnel (e.g., `ngrok http 8787`) and use the resulting `https://` URL as the Base URL.
+
+### Server Verification
+
+```bash
+# Start server
+npm run server
+
+# Test health (separate terminal)
+curl http://localhost:8787/
+
+# Test agent run
+curl -X POST http://localhost:8787/run \
+  -H "Content-Type: application/json" \
+  -d '{"repo":"https://github.com/TsolmonTuzox/pr-agent-demo","goal":"Fix the failing test in utils/date.js"}'
+```
 
 ---
 
