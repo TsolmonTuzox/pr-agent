@@ -78,17 +78,17 @@ function run(repoUrl, goal) {
     publisher.pushBranch(repoPath, branchName);
     console.log('✓ Pushed to GitHub\n');
     
-    // Step 7: Create PR
-    console.log('[7/7] 🎉 Creating pull request...');
+    // Step 7: Prepare PR data
+    console.log('[7/7] 🎉 Preparing pull request...');
     const repoInfo = publisher.getRepoInfo(repoPath);
     const prBody = createPRBody(fallbackPatch, baselineResult, verifyResult);
-    const prUrl = publisher.createPullRequestActual(
+    const prData = publisher.createPullRequestActual(
       repoInfo,
       branchName,
       'Fix: ' + fallbackPatch.summary,
       prBody
     );
-    console.log('✓ PR created: ' + prUrl + '\n');
+    console.log('✓ PR data prepared\n');
     
     // Clean up on success
     if (workDir && fs.existsSync(workDir)) {
@@ -101,8 +101,9 @@ function run(repoUrl, goal) {
     
     return {
       status: 'success',
-      prUrl: prUrl,
-      branchName: branchName
+      prData: prData,
+      branchName: branchName,
+      repoInfo: repoInfo
     };
     
   } catch (error) {

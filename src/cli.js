@@ -55,9 +55,10 @@ function main() {
     const result = agent.run(args.repo, args.goal);
     
     if (result.status === 'success') {
-      console.log('✅ Done! PR is ready for review.');
-      console.log('\nPR URL: ' + result.prUrl);
-      console.log('Branch: ' + result.branchName);
+      console.log('✅ Agent execution complete!');
+      console.log('\nPR Data for creation:');
+      console.log(JSON.stringify(result.prData, null, 2));
+      console.log('\nNow creating PR via GitHub API...\n');
       process.exit(0);
     }
     
