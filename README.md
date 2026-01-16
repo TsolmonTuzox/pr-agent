@@ -202,6 +202,70 @@ src/
 ✅ **Clean workspace** – Isolated temporary directories
 ✅ **Zero dependencies** – Pure Node.js (v12 compatible)
 ✅ **Optional LLM** – Anthropic integration for non-demo repos
+✅ **HTTP API** – Retool/webhook integration via REST endpoint
+
+---
+
+## Retool Integration (HTTP API)
+
+PR Agent includes an HTTP server for integration with Retool, webhooks, and other automation tools.
+
+### Start the Server
+
+```bash
+npm run server
+```
+
+Server runs on port **8787** by default (configurable via `PORT` env var).
+
+### API Endpoint
+
+**POST /run**
+
+Request body:
+```json
+{
+  "repo": "https://github.com/TsolmonTuzox/pr-agent-demo",
+  "goal": "Fix the failing test in utils/date.js"
+}
+```
+
+Response:
+```json
+{
+  "status": "success",
+  "logs": "🤖 PR Agent Starting...\n...",
+  "prData": {
+    "owner": "TsolmonTuzox",
+    "repo": "pr-agent-demo",
+    "head": "fix/20260116-121115",
+    "base": "main",
+    "title": "Fix: ...",
+    "body": "..."
+  }
+}
+```
+
+Status values: `success`, `verify_failed`, `needs_llm`, `error`
+
+### Test with curl
+
+```bash
+curl -X POST http://localhost:8787/run \
+  -H "Content-Type: application/json" \
+  -d '{"repo":"https://github.com/TsolmonTuzox/pr-agent-demo","goal":"Fix the failing test in utils/date.js"}'
+```
+
+### Retool Setup
+
+1. Create a new **REST API** resource in Retool
+2. Set Base URL: `http://localhost:8787` (or your server's public URL)
+3. Create a query with:
+   - Method: POST
+   - Path: `/run`
+   - Body: `{ "repo": "{{repoInput.value}}", "goal": "{{goalInput.value}}" }`
+4. Display `{{ query.data.logs }}` in a text area
+5. Display `{{ query.data.prData }}` as JSON or link to PR
 
 ---
 
