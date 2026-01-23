@@ -216,6 +216,9 @@ curl -X POST http://localhost:8787/run \
 ### Environment Variables
 
 ```bash
+# GitHub Personal Access Token (optional, for automatic PR creation via API)
+export GITHUB_TOKEN=ghp_...
+
 # Anthropic API (optional, for LLM mode)
 export ANTHROPIC_API_KEY=sk-ant-...
 
@@ -593,8 +596,8 @@ Extract owner/repo from git remote URL.
 - HTTPS: `https://github.com/owner/repo.git`
 - SSH: `git@github.com:owner/repo.git`
 
-#### `createPullRequestActual(repoInfo, branchName, title, body)`
-Prepare PR data structure (doesn't create PR via API directly).
+#### `createPullRequestData(repoInfo, branchName, title, body)`
+Prepare PR data structure for external use.
 
 **Returns**:
 ```javascript
@@ -608,7 +611,41 @@ Prepare PR data structure (doesn't create PR via API directly).
 }
 ```
 
-**Note**: Actual PR creation is done via external tools in agent context (e.g., `gh` CLI or GitHub API).
+#### `createPullRequestActual(repoInfo, branchName, title, body)`
+Create Pull Request via GitHub API (if `GITHUB_TOKEN` is set).
+
+**Returns Promise**:
+```javascript
+{
+  prData: { owner, repo, head, base, title, body },
+  url: 'https://github.com/owner/repo/pull/123',  // or null
+  number: 123,  // or undefined
+  createdViaAPI: true  // or false
+}
+```
+
+**Behavior**:
+- **With `GITHUB_TOKEN`**: Makes HTTPS POST request to GitHub API `/repos/{owner}/{repo}/pulls`
+- **Without `GITHUB_TOKEN`**: Returns prData only with `createdViaAPI: false`
+- **API Error**: Logs error details and falls back to prData only
+- **Timeout**: 30 seconds
+
+**GitHub API Request**:
+```javascript
+POST https://api.github.com/repos/{owner}/{repo}/pulls
+Headers:
+  Authorization: token {GITHUB_TOKEN}
+  Accept: application/vnd.github.v3+json
+  User-Agent: pr-agent
+Body:
+  { title, head, base, body }
+```
+
+**Error Handling**:
+- Validates response status (201 = success)
+- Logs API errors with status code and message
+- Gracefully falls back on any failure
+- Never throws, always resolves Promise
 
 ---
 
@@ -731,6 +768,29 @@ node src/cli.js \
 - Should call Anthropic API
 - Generate patch based on LLM response
 - Validate patch structure before applying
+
+### GitHub PR Creation Testing
+
+```bash
+# Set GitHub token for automatic PR creation
+export GITHUB_TOKEN=ghp_your_token_here
+
+# Run agent
+node src/cli.js \
+  --repo https://github.com/TsolmonTuzox/pr-agent-demo \
+  --goal "Fix the failing test in utils/date.js"
+```
+
+**Expected Behavior (with GITHUB_TOKEN)**:
+- Creates real PR via GitHub API
+- Prints PR URL: `https://github.com/owner/repo/pull/123`
+- Returns `createdViaAPI: true`
+
+**Expected Behavior (without GITHUB_TOKEN)**:
+- Pushes branch to GitHub
+- Returns PR data structure
+- Prints: "To enable automatic PR creation, set GITHUB_TOKEN environment variable"
+- Returns `createdViaAPI: false`
 
 ---
 

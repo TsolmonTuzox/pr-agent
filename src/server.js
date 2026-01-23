@@ -50,7 +50,7 @@ function sendJSON(res, statusCode, data) {
  * Extract PR Data JSON from logs
  */
 function extractPRData(logs) {
-  var marker = 'PR Data:';
+  var marker = 'PR Data (manual creation required):';
   var idx = logs.indexOf(marker);
   if (idx === -1) {
     return null;
@@ -67,6 +67,28 @@ function extractPRData(logs) {
   } catch (e) {
     return null;
   }
+}
+
+/**
+ * Extract PR URL from logs (when created via API)
+ */
+function extractPRUrl(logs) {
+  var urlMatch = logs.match(/URL: (https:\/\/github\.com\/[^\s]+)/);
+  if (urlMatch && urlMatch[1]) {
+    return urlMatch[1];
+  }
+  return null;
+}
+
+/**
+ * Extract PR Number from logs (when created via API)
+ */
+function extractPRNumber(logs) {
+  var numberMatch = logs.match(/PR Number: #(\d+)/);
+  if (numberMatch && numberMatch[1]) {
+    return parseInt(numberMatch[1], 10);
+  }
+  return null;
 }
 
 /**
@@ -113,11 +135,16 @@ function runAgent(repo, goal, callback) {
   proc.on('close', function(code) {
     var status = determineStatus(logs, code);
     var prData = extractPRData(logs);
+    var prUrl = extractPRUrl(logs);
+    var prNumber = extractPRNumber(logs);
 
     callback(null, {
       status: status,
       logs: logs,
-      prData: prData
+      prData: prData,
+      prUrl: prUrl,
+      prNumber: prNumber,
+      createdViaAPI: !!prUrl
     });
   });
 

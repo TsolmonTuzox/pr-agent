@@ -4,6 +4,7 @@
  */
 
 const { execSync } = require('child_process');
+const https = require('https');
 
 /**
  * Create a new branch with timestamp
@@ -106,7 +107,7 @@ function getTimestamp() {
  * Create PR info for external tool usage
  * Returns the data structure needed for PR creation
  */
-function createPullRequestActual(repoInfo, branchName, title, body) {
+function createPullRequestData(repoInfo, branchName, title, body) {
   // Return info that will be used by external PR creation
   return {
     owner: repoInfo.owner,
@@ -118,10 +119,129 @@ function createPullRequestActual(repoInfo, branchName, title, body) {
   };
 }
 
+/**
+ * Create Pull Request via GitHub API
+ * @param {Object} repoInfo - Repository info with owner and repo
+ * @param {string} branchName - Branch name to create PR from
+ * @param {string} title - PR title
+ * @param {string} body - PR body/description
+ * @returns {Promise<Object>} Promise that resolves to PR data or null
+ */
+function createPullRequestActual(repoInfo, branchName, title, body) {
+  return new Promise(function(resolve) {
+    var token = process.env.GITHUB_TOKEN;
+
+    // Graceful fallback: if no token, return data structure only
+    if (!token) {
+      console.log('⚠️  GITHUB_TOKEN not set, returning PR data only (manual creation required)');
+      resolve({
+        prData: createPullRequestData(repoInfo, branchName, title, body),
+        url: null,
+        createdViaAPI: false
+      });
+      return;
+    }
+
+    // Prepare GitHub API request
+    var requestBody = JSON.stringify({
+      title: title,
+      head: branchName,
+      base: 'main',
+      body: body
+    });
+
+    var options = {
+      hostname: 'api.github.com',
+      port: 443,
+      path: '/repos/' + repoInfo.owner + '/' + repoInfo.repo + '/pulls',
+      method: 'POST',
+      headers: {
+        'Authorization': 'token ' + token,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'pr-agent',
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(requestBody)
+      }
+    };
+
+    var req = https.request(options, function(res) {
+      var data = '';
+
+      res.on('data', function(chunk) {
+        data += chunk;
+      });
+
+      res.on('end', function() {
+        if (res.statusCode === 201) {
+          // PR created successfully
+          try {
+            var response = JSON.parse(data);
+            resolve({
+              prData: createPullRequestData(repoInfo, branchName, title, body),
+              url: response.html_url,
+              number: response.number,
+              createdViaAPI: true
+            });
+          } catch (e) {
+            console.log('⚠️  Failed to parse GitHub API response: ' + e.message);
+            resolve({
+              prData: createPullRequestData(repoInfo, branchName, title, body),
+              url: null,
+              createdViaAPI: false
+            });
+          }
+        } else {
+          // API error - log details and fallback
+          console.log('⚠️  GitHub API error: ' + res.statusCode);
+          try {
+            var errBody = JSON.parse(data);
+            if (errBody.message) {
+              console.log('⚠️  Error details: ' + errBody.message);
+            }
+            if (errBody.errors) {
+              console.log('⚠️  Errors: ' + JSON.stringify(errBody.errors));
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+          resolve({
+            prData: createPullRequestData(repoInfo, branchName, title, body),
+            url: null,
+            createdViaAPI: false
+          });
+        }
+      });
+    });
+
+    req.on('error', function(e) {
+      console.log('⚠️  GitHub API request failed: ' + e.message);
+      resolve({
+        prData: createPullRequestData(repoInfo, branchName, title, body),
+        url: null,
+        createdViaAPI: false
+      });
+    });
+
+    req.setTimeout(30000, function() {
+      console.log('⚠️  GitHub API request timed out');
+      req.destroy();
+      resolve({
+        prData: createPullRequestData(repoInfo, branchName, title, body),
+        url: null,
+        createdViaAPI: false
+      });
+    });
+
+    req.write(requestBody);
+    req.end();
+  });
+}
+
 module.exports = {
   createBranch: createBranch,
   commitChanges: commitChanges,
   pushBranch: pushBranch,
   getRepoInfo: getRepoInfo,
+  createPullRequestData: createPullRequestData,
   createPullRequestActual: createPullRequestActual
 };

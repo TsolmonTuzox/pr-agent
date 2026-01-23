@@ -81,7 +81,7 @@ function run(repoUrl, goal) {
  * @param {string} repoPath - Path to repository
  * @param {string} workDir - Working directory
  * @param {Object} baselineResult - Baseline test results
- * @returns {Object} Execution result
+ * @returns {Promise<Object>} Execution result
  */
 function executeWithPatch(patch, repoPath, workDir, baselineResult) {
   // Step 4: Apply fix
@@ -107,10 +107,10 @@ function executeWithPatch(patch, repoPath, workDir, baselineResult) {
       }
     }
 
-    return {
+    return Promise.resolve({
       status: 'verify_failed',
       output: verifyResult.output
-    };
+    });
   }
 
   console.log('✓ Tests now passing (' + (baselineResult.success ? 'still passing' : 'fixed') + ')\n');
@@ -126,33 +126,42 @@ function executeWithPatch(patch, repoPath, workDir, baselineResult) {
   publisher.pushBranch(repoPath, branchName);
   console.log('✓ Pushed to GitHub\n');
 
-  // Step 7: Prepare PR data
-  console.log('[7/7] 🎉 Preparing pull request...');
+  // Step 7: Create pull request
+  console.log('[7/7] 🎉 Creating pull request...');
   var repoInfo = publisher.getRepoInfo(repoPath);
   var prBody = createPRBody(patch, baselineResult, verifyResult);
-  var prData = publisher.createPullRequestActual(
+
+  return publisher.createPullRequestActual(
     repoInfo,
     branchName,
     'Fix: ' + patch.summary,
     prBody
-  );
-  console.log('✓ PR data prepared\n');
-
-  // Clean up on success
-  if (workDir && fs.existsSync(workDir)) {
-    try {
-      execSync('rm -rf ' + workDir, { stdio: 'pipe' });
-    } catch (e) {
-      // Ignore cleanup errors
+  ).then(function(prResult) {
+    if (prResult.createdViaAPI && prResult.url) {
+      console.log('✓ Pull Request created: ' + prResult.url + '\n');
+    } else {
+      console.log('✓ PR data prepared (manual creation required)\n');
     }
-  }
 
-  return {
-    status: 'success',
-    prData: prData,
-    branchName: branchName,
-    repoInfo: repoInfo
-  };
+    // Clean up on success
+    if (workDir && fs.existsSync(workDir)) {
+      try {
+        execSync('rm -rf ' + workDir, { stdio: 'pipe' });
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    }
+
+    return {
+      status: 'success',
+      prData: prResult.prData,
+      prUrl: prResult.url,
+      prNumber: prResult.number,
+      createdViaAPI: prResult.createdViaAPI,
+      branchName: branchName,
+      repoInfo: repoInfo
+    };
+  });
 }
 
 /**

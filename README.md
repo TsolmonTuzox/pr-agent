@@ -53,10 +53,17 @@ https://github.com/TsolmonTuzox/pr-agent-demo/pull/2
 
 - Node.js v12+ (verified on v12.22.9)
 - Git configured
-- GitHub authentication via MCP tools
+- GitHub Personal Access Token (for automatic PR creation, optional)
 
 **Zero npm dependencies.**
 Uses Node.js built-ins only.
+
+### Environment Variables
+
+- `GITHUB_TOKEN` (optional) - GitHub Personal Access Token for automatic PR creation
+- `ANTHROPIC_API_KEY` (optional) - Anthropic API key for LLM-powered fixes
+- `ANTHROPIC_MODEL` (optional) - Model to use (defaults to `claude-sonnet-4-20250514`)
+- `PORT` (optional) - HTTP server port (defaults to `8787`)
 
 ---
 
@@ -93,6 +100,70 @@ LLM responses are strictly validated:
 - `file` must be a relative path to an existing file
 - `oldCode` must match exactly in the target file
 - Any validation failure falls back to `needs_llm` status
+
+---
+
+## GitHub Authentication (Pull Request Creation)
+
+PR Agent can automatically create Pull Requests via the GitHub API when properly authenticated.
+
+### Setup
+
+Set the environment variable:
+```bash
+export GITHUB_TOKEN=ghp_your_personal_access_token
+```
+
+**Creating a GitHub Personal Access Token:**
+1. Go to GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)
+2. Click "Generate new token (classic)"
+3. Give it a descriptive name (e.g., "PR Agent")
+4. Select scopes: `repo` (Full control of private repositories)
+5. Click "Generate token"
+6. Copy the token and set it as `GITHUB_TOKEN` environment variable
+
+### Behavior
+
+1. **With `GITHUB_TOKEN` set**: The agent creates a real Pull Request via GitHub API and returns the PR URL
+   ```bash
+   ✅ Agent execution complete!
+
+   🎉 Pull Request created successfully!
+   URL: https://github.com/owner/repo/pull/123
+   PR Number: #123
+   ```
+
+2. **Without `GITHUB_TOKEN`**: The agent pushes the branch and returns PR data structure for manual PR creation
+   ```bash
+   ✅ Agent execution complete!
+
+   PR Data (manual creation required):
+   {
+     "owner": "owner",
+     "repo": "repo",
+     "head": "fix/20260122-143052",
+     "base": "main",
+     "title": "Fix: ...",
+     "body": "..."
+   }
+
+   To enable automatic PR creation, set GITHUB_TOKEN environment variable
+   ```
+
+### Full Example with Authentication
+
+```bash
+# Set tokens
+export GITHUB_TOKEN=ghp_your_token_here
+export ANTHROPIC_API_KEY=sk-ant-your_key_here  # Optional, for LLM mode
+
+# Run agent
+node src/cli.js \
+  --repo https://github.com/TsolmonTuzox/pr-agent-demo \
+  --goal "Fix the failing test in utils/date.js"
+
+# Expected: Real PR created and URL printed
+```
 
 ---
 
@@ -174,10 +245,14 @@ src/
 ✓ Changes committed
 ✓ Pushed to GitHub
 
-[7/7] 🎉 Preparing pull request...
-✓ PR data prepared
+[7/7] 🎉 Creating pull request...
+✓ Pull Request created: https://github.com/TsolmonTuzox/pr-agent-demo/pull/3
 
 ✅ Agent execution complete!
+
+🎉 Pull Request created successfully!
+URL: https://github.com/TsolmonTuzox/pr-agent-demo/pull/3
+PR Number: #3
 ```
 
 ---
@@ -230,7 +305,7 @@ Request body:
 }
 ```
 
-Response:
+Response (with GITHUB_TOKEN set):
 ```json
 {
   "status": "success",
@@ -242,7 +317,29 @@ Response:
     "base": "main",
     "title": "Fix: ...",
     "body": "..."
-  }
+  },
+  "prUrl": "https://github.com/TsolmonTuzox/pr-agent-demo/pull/3",
+  "prNumber": 3,
+  "createdViaAPI": true
+}
+```
+
+Response (without GITHUB_TOKEN):
+```json
+{
+  "status": "success",
+  "logs": "🤖 PR Agent Starting...\n...",
+  "prData": {
+    "owner": "TsolmonTuzox",
+    "repo": "pr-agent-demo",
+    "head": "fix/20260116-121115",
+    "base": "main",
+    "title": "Fix: ...",
+    "body": "..."
+  },
+  "prUrl": null,
+  "prNumber": null,
+  "createdViaAPI": false
 }
 ```
 

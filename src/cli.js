@@ -56,9 +56,17 @@ async function main() {
 
     if (result.status === 'success') {
       console.log('✅ Agent execution complete!');
-      console.log('\nPR Data:');
-      console.log(JSON.stringify(result.prData, null, 2));
-      console.log('\nReady for PR creation via GitHub API');
+
+      if (result.createdViaAPI && result.prUrl) {
+        console.log('\n🎉 Pull Request created successfully!');
+        console.log('URL: ' + result.prUrl);
+        console.log('PR Number: #' + result.prNumber);
+      } else {
+        console.log('\nPR Data (manual creation required):');
+        console.log(JSON.stringify(result.prData, null, 2));
+        console.log('\nTo enable automatic PR creation, set GITHUB_TOKEN environment variable');
+      }
+
       process.exit(0);
     }
 
